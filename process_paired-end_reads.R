@@ -1,5 +1,5 @@
-process_paired-end_reads <- function(output_string, data_folder, trim_right = 0,
-  fwd_primer, rev_primer, unite_ref) {
+process_paired-end_reads <- function(data_folder, output_string = "output",
+  trim_right = 0, fwd_primer, rev_primer, unite_ref = NULL) {
 
   require(dada2)
   require(ShortRead)
