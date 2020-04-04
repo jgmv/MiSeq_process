@@ -128,7 +128,7 @@ process_unpaired_reads <- function(data_folder, output_string = "output",
       log_tab[i , "rev_asv"] <- length(rev_dada$sequence)
       saveRDS(rev_dada, file = paste0(output_dada, "/", i, "_rev_dada.rds"))
 
-      # remove objects and free-up memory for next lopp iteration
+      # remove objects and free-up memory for next loop iteration
       rm(temp, x, fwd_filt, rev_filt, fwd_derep, rev_derep, fwd_err, rev_err,
         fwd_dada, rev_dada, merged_reads, merged_reads_nochim)
       gc()
