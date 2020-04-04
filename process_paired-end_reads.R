@@ -213,7 +213,7 @@ process_paired-end_reads <- function(data_folder, output_string = "output",
       log_tab[i , "merged_asv"] <- length(merged_reads$sequence)
       saveRDS(merged_reads, file = paste0(output_merged, "/", i, "_merged.rds"))
   
-      # remove objects and free-up memory for next lopp iteration
+      # remove objects and free-up memory for next loop iteration
       rm(temp, x, fwd_filt, rev_filt, fwd_derep, rev_derep, fwd_err, rev_err,
         fwd_dada, rev_dada, merged_reads, merged_reads_nochim)
       gc()
