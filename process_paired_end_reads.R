@@ -280,11 +280,8 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
     "seqtab_process_time.txt"))
 
 
-  ## modify seqtable to add failed samples and extract ASV sequences
-  failed <- names(fwd_reads)[!(names(fwd_reads) %in% names(merged_reads))]
-  failed_reads <- matrix(0, nrow = length(failed), ncol = ncol(seqtab),
-    dimnames = list(failed, colnames(seqtab)))
-  cdm <- rbind(seqtab, failed_reads)
+  ## extract community data matrix and ASV sequences
+  cdm <- seqtab_nochim
   ASV_seqs <- colnames(cdm)
   names(ASV_seqs) <- paste0("ASV", sprintf("%05d", 1:length(ASV_seqs)))
   colnames(cdm) <- names(ASV_seqs)
