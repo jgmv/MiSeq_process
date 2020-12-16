@@ -1,6 +1,6 @@
 process_paired_end_reads <- function(data_folder, output_string = "output",
-  trim_right = 0, fwd_primer = NULL, rev_primer = NULL, fwd_file_pattern,
-  rev_file_pattern, unite_ref = NULL) {
+  trim_right = 0, fwd_primer = "", rev_primer = "", fwd_file_pattern,
+  rev_file_pattern, unite_ref = NULL, samples = NULL) {
 
   require(dada2)
   require(ShortRead)
@@ -109,8 +109,16 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
   log_tab$merged_asv <- rep(NA, nrow(log_tab))
 
 
+  ## select samples to process
+  if(is.null(samples)) {
+    samples <- 1:length(fwd_reads)
+  } else {
+    sel <- samples
+  }
+
+
   ## Individual sample processing in loop
-  for(i in names(fwd_reads)) {
+  for(i in names(fwd_reads)[sel]) {
     cat("Processing:", i, "\n")
 
     # record time for analysis end
