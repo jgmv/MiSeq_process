@@ -1,5 +1,6 @@
 process_paired_end_reads <- function(data_folder, output_string = "output",
-  trim_right = 0, fwd_primer, rev_primer, unite_ref = NULL) {
+  trim_right = 0, fwd_primer = NULL, rev_primer = NULL, fwd_file_pattern,
+  rev_file_pattern, unite_ref = NULL) {
 
   require(dada2)
   require(ShortRead)
@@ -7,11 +8,12 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
 
 
   ## load cutadapt
-  cutadapt <- "/usr/local/bin/cutadapt"
+  cutadapt <- "/usr/bin/cutadapt" # change path if necessary
+  message("Using cutadapt version:")
   system2(cutadapt, args = "--version")
 
   ## create output folders
-  output_main <- paste(output_string, Sys.Date(), sep = "_")
+  output_main <- gsub(" ", "_", paste(output_string, Sys.time(), sep = "_"))
   if (!dir.exists(output_main)) dir.create(output_main)
 
   output_filtN <- paste(output_main, "filtN", sep = "/")
@@ -37,13 +39,17 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
 
 
   ## input files
-  fwd_reads <- sort(list.files(data_folder, pattern = "_1.fastq.gz",
-    full.names = T))
-  names(fwd_reads) <- gsub('^.*19239_\\s*|\\s*_lib.*$', '', fwd_reads)
+  fwd_reads <- sort(list.files(data_folder, pattern = fwd_file_pattern,
+    full.names = T, recursive = T))
+  names(fwd_reads) <- substr(fwd_reads,
+    max(unlist(gregexpr(pattern = "/", fwd_reads))), nchar(fwd_reads))
+  names(fwd_reads) <- gsub(fwd_file_pattern, "", names(fwd_reads))
 
-  rev_reads <- sort(list.files(data_folder, pattern = "_2.fastq.gz",
-    full.names = T))
-  names(rev_reads) <- gsub('^.*19239_\\s*|\\s*_lib.*$', '', rev_reads)
+  rev_reads <- sort(list.files(data_folder, pattern = rev_file_pattern,
+    full.names = T, recursive = T))
+  names(rev_reads) <- substr(rev_reads,
+    max(unlist(gregexpr(pattern = "/", rev_reads))), nchar(rev_reads))
+  names(rev_reads) <- gsub(rev_file_pattern, "", names(rev_reads))
 
 
   ## functions to remove primers
@@ -68,7 +74,6 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
   # create all orientations for sequencing primers
   allOrients <- function(primer) {
       # Create all orientations of the input sequence
-      require(Biostrings)
       dna <- DNAString(primer)
       orients <- c(Forward = dna, Complement = complement(dna),
         Reverse = reverse(dna), RevComp = reverseComplement(dna))
@@ -215,13 +220,17 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
   
       # remove objects and free-up memory for next loop iteration
       rm(temp, x, fwd_filt, rev_filt, fwd_derep, rev_derep, fwd_err, rev_err,
-        fwd_dada, rev_dada, merged_reads, merged_reads_nochim)
+        fwd_dada, rev_dada, merged_reads)
       gc()
 
     }, error = function(e) e)
 
     # record time for analysis end
     log_tab[i, "timestamp_end"] <- Sys.time()
+
+    # save summary table
+    write.table(log_tab, file = paste0(output_main, "/", "log.csv"),
+      col.names = NA, sep = "\t")
   }
 
 
@@ -264,7 +273,7 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
   write.table(cdm, file = paste0(output_main, "/", "cdm.csv"), col.names = NA)
 
 
-  ## assign taxonomy (SKIPPED: too slow!!!)
+  ## assign taxonomy (skip if problems with memory allocation, or if too slow!)
   #taxonomy_process_time <- as.POSIXlt(rep(NA, 2))
   #names(taxonomy_process_time) <- c("timestamp_start", "timestamp_end")
   #taxonomy_process_time["timestamp_start"] <- Sys.time()
@@ -274,10 +283,5 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
   #taxonomy_process_time["timestamp_end"] <- Sys.time()
   #write(taxonomy_process_time, file = paste0(output_main, "/",
   #  "taxonomy_process_time.txt"))
-
-
-  ## save summary table
-  write.table(log_tab, file = paste0(output_main, "/", "log.csv"), col.names = NA,
-    sep = "\t")
 
 }
