@@ -111,7 +111,7 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
 
   ## select samples to process
   if(is.null(samples)) {
-    samples <- 1:length(fwd_reads)
+    sel <- 1:length(fwd_reads)
   } else {
     sel <- samples
   }
@@ -158,32 +158,44 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
 
       # plot QC plots
       pdf(paste0(output_QC, "/", i, "_fwd.pdf"), w = 4, h = 3)
-      x <- plotQualityProfile(fwd_reads[i])
+      x <- tryCatch(plotQualityProfile(fwd_reads[i]),
+        error = function(e) plot(1, 1, type = "n", axes = F, ylab = NA,
+        xlab = NA))
       print(x)
       dev.off()
 
       pdf(paste0(output_QC, "/", i, "_rev.pdf"), w = 4, h = 3)
-      x <- plotQualityProfile(rev_reads[i])
+      x <- tryCatch(plotQualityProfile(rev_reads[i]),
+        error = function(e) plot(1, 1, type = "n", axes = F, ylab = NA,
+        xlab = NA))
       print(x)
       dev.off()
 
       pdf(paste0(output_QC, "/", i, "_fwd_cut.pdf"), w = 4, h = 3)
-      x <- plotQualityProfile(fwd_reads_cut[i])
+      x <- tryCatch(plotQualityProfile(fwd_reads_cut[i]),
+        error = function(e) plot(1, 1, type = "n", axes = F, ylab = NA,
+        xlab = NA))
       print(x)
       dev.off()
 
       pdf(paste0(output_QC, "/", i, "_rev_cut.pdf"), w = 4, h = 3)
-      x <- plotQualityProfile(rev_reads_cut[i])
+      x <- tryCatch(plotQualityProfile(rev_reads_cut[i]),
+        error = function(e) plot(1, 1, type = "n", axes = F, ylab = NA,
+        xlab = NA))
       print(x)
       dev.off()
 
       pdf(paste0(output_QC, "/", i, "_fwd_filt.pdf"), w = 4, h = 3)
-      x <- plotQualityProfile(fwd_filt)
+      x <- tryCatch(plotQualityProfile(fwd_filt),
+        error = function(e) plot(1, 1, type = "n", axes = F, ylab = NA,
+        xlab = NA))
       print(x)
       dev.off()
 
       pdf(paste0(output_QC, "/", i, "_rev_filt.pdf"), w = 4, h = 3)
-      x <- plotQualityProfile(rev_filt)
+      x <- tryCatch(plotQualityProfile(rev_filt),
+        error = function(e) plot(1, 1, type = "n", axes = F, ylab = NA,
+        xlab = NA))
       print(x)
       dev.off()
 
