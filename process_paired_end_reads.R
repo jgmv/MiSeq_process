@@ -12,6 +12,7 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
   message("Using cutadapt version:")
   system2(cutadapt, args = "--version")
 
+
   ## create output folders
   output_main <- gsub(" ", "_", paste(output_string, Sys.time(), sep = "_"))
   if (!dir.exists(output_main)) dir.create(output_main)
