@@ -1,6 +1,8 @@
+# default parameters for ITS
 process_paired_end_reads <- function(data_folder, output_string = "output",
   trim_right = 0, fwd_primer = "", rev_primer = "", fwd_file_pattern,
-  rev_file_pattern, unite_ref = NULL, samples = NULL) {
+  rev_file_pattern, unite_ref = NULL, samples = NULL, maxN = 0, maxEE = c(2, 2),
+  truncQ = 2, truncLen = 0, minLen = 50, rm.phix = T) {
 
   require(dada2)
   require(ShortRead)
@@ -148,16 +150,20 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
         fn = rev_reads_cut[[i]]))
 
       # quality-filter sequences
+      message("Quality-filtering reads...")
       fwd_filt <- tempfile(fileext = ".fastq.gz")  
       rev_filt <- tempfile(fileext = ".fastq.gz")
       temp <- filterAndTrim(fwd = fwd_reads_cut[i], filt = fwd_filt,
-        rev = rev_reads_cut[i], filt.rev = rev_filt, maxN = 0, maxEE = c(2, 2),
-        truncQ = 2, minLen = 50, compress = T, verbose = T)
+        rev = rev_reads_cut[i], filt.rev = rev_filt, maxN = maxN,
+        maxEE = maxEE, truncQ = truncQ, truncLen = truncLen, minLen = minLen,
+        rm.phix = rm.phix, compress = T, verbose = T)
       log_tab[i , "filename"] <- rownames(temp)
       log_tab[i , "reads_filt_in"] <- temp[1]
       log_tab[i , "reads_filt_out"] <- temp[2]
+      message("Done!")
 
       # plot QC plots
+      message("Plotting QC plots...")
       pdf(paste0(output_QC, "/", i, "_fwd.pdf"), w = 4, h = 3)
       x <- tryCatch(plotQualityProfile(fwd_reads[i]),
         error = function(e) plot(1, 1, type = "n", axes = F, ylab = NA,
@@ -199,11 +205,13 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
         xlab = NA))
       print(x)
       dev.off()
+      message("Done!")
 
       # learn error rates
-      fwd_err <- learnErrors(fwd_filt, multithread = F)
+      message("Learning error rates...")
+      fwd_err <- learnErrors(fwd_filt, multithread = F, verbose = T)
       saveRDS(fwd_err, file = paste0(output_err, "/", i, "_fwd_err.rds"))
-      rev_err <- learnErrors(rev_filt, multithread = F)
+      rev_err <- learnErrors(rev_filt, multithread = F, verbose = T)
       saveRDS(rev_err, file = paste0(output_err, "/", i, "_rev_err.rds"))
 
       pdf(paste0(output_err, "/", i, "_fwd_err.pdf"), w = 4, h = 4)
@@ -215,29 +223,36 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
       x <- plotErrors(rev_err, nominalQ = T)
       print(x)
       dev.off()
+      message("Done!")
   
       # dereplicate sequences
+      message("Dereplicating sequences...")
       fwd_derep <- derepFastq(fwd_filt, verbose = T)
       log_tab[i , "reads_fwd_derep"] <- length(fwd_derep$uniques)
       saveRDS(fwd_derep, file = paste0(output_derep, "/", i, "_fwd_derep.rds"))
       rev_derep <- derepFastq(rev_filt, verbose = T)
       log_tab[i , "reads_rev_derep"] <- length(rev_derep$uniques)
       saveRDS(rev_derep, file = paste0(output_derep, "/", i, "_rev_derep.rds"))
+      message("Done!")
 
       # infer sample composition
+      message("Inferring sample composition...")
       fwd_dada <- dada(fwd_derep, err = fwd_err, multithread = F)
       log_tab[i , "fwd_asv"] <- length(fwd_dada$sequence)
       saveRDS(fwd_dada, file = paste0(output_dada, "/", i, "_fwd_dada.rds"))
       rev_dada <- dada(rev_derep, err = rev_err, multithread = F)
       log_tab[i , "rev_asv"] <- length(rev_dada$sequence)
       saveRDS(rev_dada, file = paste0(output_dada, "/", i, "_rev_dada.rds"))
+      message("Done!")
 
       # merge forward and reverse reads
+      message("Merging reads...")
       merged_reads <- mergePairs(fwd_dada, fwd_derep, rev_dada, rev_derep,
         verbose = T)
       log_tab[i , "merged_reads"] <- sum(merged_reads$abundance)
       log_tab[i , "merged_asv"] <- length(merged_reads$sequence)
       saveRDS(merged_reads, file = paste0(output_merged, "/", i, "_merged.rds"))
+      message("Done!")
   
       # remove objects and free-up memory for next loop iteration
       rm(temp, x, fwd_filt, rev_filt, fwd_derep, rev_derep, fwd_err, rev_err,
@@ -256,6 +271,7 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
 
 
   ## create sequence table
+  message("Creating contingency table...")
   seqtab_process_time <- as.POSIXlt(rep(NA, 2))
   names(seqtab_process_time) <- c("timestamp_start", "timestamp_end")
   seqtab_process_time["timestamp_start"] <- Sys.time()
@@ -270,28 +286,32 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
   }
   seqtab <- makeSequenceTable(merged_reads)
   saveRDS(seqtab, file = paste0(output_main, "/", "seqtab.rds"))
-
+  message("Done!")
 
   ## remove chimeras
+  message("Removing chimeras...")
   seqtab_nochim <- removeBimeraDenovo(seqtab, method = "consensus",
     multithread = F, verbose = T)
   saveRDS(seqtab_nochim, file = paste0(output_main, "/", "seqtab_nochim.rds"))
   seqtab_process_time["timestamp_end"] <- Sys.time()
   write(seqtab_process_time, file = paste0(output_main, "/",
     "seqtab_process_time.txt"))
-
+  message("Done!")
 
   ## extract community data matrix and ASV sequences
-  cdm <- seqtab_nochim
+  message("Saving datasets...")
+  #cdm <- seqtab_nochim
+  cdm <- readRDS(paste0(output_main, "/", "seqtab_nochim.rds"))
   ASV_seqs <- colnames(cdm)
   names(ASV_seqs) <- paste0("ASV", sprintf("%05d", 1:length(ASV_seqs)))
   colnames(cdm) <- names(ASV_seqs)
   write(paste0(">", names(ASV_seqs), "\n", ASV_seqs),
     file = paste0(output_main, "/", "ASV_seqs.fasta"))
   write.table(cdm, file = paste0(output_main, "/", "cdm.csv"), col.names = NA)
-
+  message("Done!")
 
   ## assign taxonomy (skip if problems with memory allocation, or if too slow!)
+  #message("Assigning taxonomy...")
   #taxonomy_process_time <- as.POSIXlt(rep(NA, 2))
   #names(taxonomy_process_time) <- c("timestamp_start", "timestamp_end")
   #taxonomy_process_time["timestamp_start"] <- Sys.time()
@@ -301,5 +321,6 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
   #taxonomy_process_time["timestamp_end"] <- Sys.time()
   #write(taxonomy_process_time, file = paste0(output_main, "/",
   #  "taxonomy_process_time.txt"))
+  #message("Done!")
 
 }
