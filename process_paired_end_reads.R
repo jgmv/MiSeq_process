@@ -1,19 +1,28 @@
 # default parameters for ITS
 process_paired_end_reads <- function(data_folder, output_string = "output",
-  trim_right = 0, fwd_primer = "", rev_primer = "", fwd_file_pattern,
+  trim_right = 0, fwd_primer = NULL, rev_primer = NULL, fwd_file_pattern,
   rev_file_pattern, unite_ref = NULL, samples = NULL, maxN = 0, maxEE = c(2, 2),
-  truncQ = 2, truncLen = 0, minLen = 50, rm.phix = T) {
+  truncQ = 2, truncLen = 0, minLen = 50, rm.phix = T,
+  cutadapt = "/usr/bin/cutadapt") {
 
   require(dada2)
   require(ShortRead)
   require(Biostrings)
 
+  ## check primers
+  primers <- T
+  if(is.null(fwd_primer) | is.null(fwd_primer)) {
+    primers <- F
+    message("At least one primer not provided. Clipping skipped.")
+  } else {
+    message("Primers provided. Will be clipped.")
+  }
 
   ## load cutadapt
-  cutadapt <- "/usr/bin/cutadapt" # change path if necessary
-  message("Using cutadapt version:")
-  system2(cutadapt, args = "--version")
-
+  if(primers) {
+    message("Using cutadapt version:")
+    system2(cutadapt, args = "--version")
+  }
 
   ## create output folders
   output_main <- gsub(" ", "_", paste(output_string, Sys.time(), sep = "_"))
@@ -22,8 +31,10 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
   output_filtN <- paste(output_main, "filtN", sep = "/")
   if (!dir.exists(output_filtN)) dir.create(output_filtN)
 
-  output_cut <- paste(output_main, "primers_cut", sep = "/")
-  if (!dir.exists(output_cut)) dir.create(output_cut)
+  if(primers) {
+    output_cut <- paste(output_main, "primers_cut", sep = "/")
+    if (!dir.exists(output_cut)) dir.create(output_cut)
+  }
 
   output_QC <- paste(output_main, "QC", sep = "/")
   if (!dir.exists(output_QC)) dir.create(output_QC)
@@ -56,11 +67,37 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
 
 
   ## functions to remove primers
-  # re-orient primers
-  fwd_primer_rc <- dada2:::rc(fwd_primer)
-  rev_primer_rc <- dada2:::rc(rev_primer)
-  fwd_flags <- paste("-g", fwd_primer, "-a", rev_primer_rc) 
-  rev_flags <- paste("-g", rev_primer, "-a", fwd_primer_rc) 
+  if(primers) {
+    # re-orient primers
+    fwd_primer_rc <- dada2:::rc(fwd_primer)
+    rev_primer_rc <- dada2:::rc(rev_primer)
+    fwd_flags <- paste("-g", fwd_primer, "-a", rev_primer_rc) 
+    rev_flags <- paste("-g", rev_primer, "-a", fwd_primer_rc) 
+
+    # path to sequence files with primers cut
+    fwd_reads_cut <- file.path(output_cut, basename(fwd_reads))
+    names(fwd_reads_cut) <- names(fwd_reads)
+    rev_reads_cut <- file.path(output_cut, basename(rev_reads))
+    names(rev_reads_cut) <- names(rev_reads)
+
+    # create all orientations for sequencing primers
+    allOrients <- function(primer) {
+        # Create all orientations of the input sequence
+        dna <- DNAString(primer)
+        orients <- c(Forward = dna, Complement = complement(dna),
+          Reverse = reverse(dna), RevComp = reverseComplement(dna))
+        return(sapply(orients, toString))
+    }
+    fwd_orients <- allOrients(fwd_primer)
+    rev_orients <- allOrients(rev_primer)
+
+    # map primers to sequences
+    primerHits <- function(primer, fn) {
+        # Counts number of reads in which the primer is found
+        nhits <- vcountPattern(primer, sread(readFastq(fn)), fixed = F)
+        return(sum(nhits > 0))
+    }
+  }
 
   # path to sequence files with Ns filtered out
   fwd_reads_filtN <- file.path(output_filtN, basename(fwd_reads))
@@ -68,40 +105,18 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
   rev_reads_filtN <- file.path(output_filtN, basename(rev_reads))
   names(rev_reads_filtN) <- names(rev_reads)
 
-  # path to sequence files with primers cut
-  fwd_reads_cut <- file.path(output_cut, basename(fwd_reads))
-  names(fwd_reads_cut) <- names(fwd_reads)
-  rev_reads_cut <- file.path(output_cut, basename(rev_reads))
-  names(rev_reads_cut) <- names(rev_reads)
-
-  # create all orientations for sequencing primers
-  allOrients <- function(primer) {
-      # Create all orientations of the input sequence
-      dna <- DNAString(primer)
-      orients <- c(Forward = dna, Complement = complement(dna),
-        Reverse = reverse(dna), RevComp = reverseComplement(dna))
-      return(sapply(orients, toString))
-  }
-  fwd_orients <- allOrients(fwd_primer)
-  rev_orients <- allOrients(rev_primer)
-
-  # map primers to sequences
-  primerHits <- function(primer, fn) {
-      # Counts number of reads in which the primer is found
-      nhits <- vcountPattern(primer, sread(readFastq(fn)), fixed = F)
-      return(sum(nhits > 0))
-  }
-
 
   ## create log table with summary data
   log_tab <- data.frame(row.names = names(fwd_reads))
   log_tab$filename <- rep(NA, nrow(log_tab))
   log_tab$timestamp_start <- as.POSIXlt(rep(NA, nrow(log_tab)))
   log_tab$timestamp_end <- as.POSIXlt(rep(NA, nrow(log_tab)))
-  log_tab$fwd_primer_match <- rep(NA, nrow(log_tab))
-  log_tab$rev_primer_match <- rep(NA, nrow(log_tab))
-  log_tab$fwd_primer_match_cut <- rep(NA, nrow(log_tab))
-  log_tab$rev_primer_match_cut <- rep(NA, nrow(log_tab))
+  if(primers) {
+    log_tab$fwd_primer_match <- rep(NA, nrow(log_tab))
+    log_tab$rev_primer_match <- rep(NA, nrow(log_tab))
+    log_tab$fwd_primer_match_cut <- rep(NA, nrow(log_tab))
+    log_tab$rev_primer_match_cut <- rep(NA, nrow(log_tab))
+  }
   log_tab$reads_filt_in <- rep(NA, nrow(log_tab))
   log_tab$reads_filt_out <- rep(NA, nrow(log_tab))
   log_tab$reads_fwd_derep <- rep(NA, nrow(log_tab))
@@ -129,34 +144,44 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
 
     tryCatch({
 
-      # remove primers
       filterAndTrim(fwd_reads[i], fwd_reads_filtN[i], rev_reads[i],
-        rev_reads_filtN[i], maxN = 0, multithread = F)
-      log_tab[i, "fwd_primer_match"] <- sum(sapply(fwd_orients, primerHits,
-        fn = fwd_reads_filtN[[i]]), sapply(fwd_orients, primerHits,
-        fn = rev_reads_filtN[[i]]))
-      log_tab[i, "rev_primer_match"] <- sum(sapply(rev_orients, primerHits,
-        fn = fwd_reads_filtN[[i]]), sapply(rev_orients, primerHits,
-        fn = rev_reads_filtN[[i]]))
-      system2(cutadapt, args = c(fwd_flags, "-n", 1, "-o",
-        fwd_reads_cut[i], fwd_reads_filtN[i]))
-      system2(cutadapt, args = c(rev_flags, "-n", 1, "-o",
-        rev_reads_cut[i], rev_reads_filtN[i]))
-      log_tab[i, "fwd_primer_match_cut"] <- sum(sapply(fwd_orients, primerHits,
-        fn = fwd_reads_cut[[i]]), sapply(fwd_orients, primerHits,
-        fn = rev_reads_cut[[i]]))
-      log_tab[i, "rev_primer_match_cut"] <- sum(sapply(rev_orients, primerHits,
-        fn = fwd_reads_cut[[i]]), sapply(rev_orients, primerHits,
-        fn = rev_reads_cut[[i]]))
+          rev_reads_filtN[i], maxN = maxN, multithread = F)
+
+      # remove primers
+      if(primers) {
+        log_tab[i, "fwd_primer_match"] <- sum(sapply(fwd_orients, primerHits,
+          fn = fwd_reads_filtN[[i]]), sapply(fwd_orients, primerHits,
+          fn = rev_reads_filtN[[i]]))
+        log_tab[i, "rev_primer_match"] <- sum(sapply(rev_orients, primerHits,
+          fn = fwd_reads_filtN[[i]]), sapply(rev_orients, primerHits,
+          fn = rev_reads_filtN[[i]]))
+        system2(cutadapt, args = c(fwd_flags, "-n", 1, "-o",
+          fwd_reads_cut[i], fwd_reads_filtN[i]))
+        system2(cutadapt, args = c(rev_flags, "-n", 1, "-o",
+          rev_reads_cut[i], rev_reads_filtN[i]))
+        log_tab[i, "fwd_primer_match_cut"] <- sum(sapply(fwd_orients, primerHits,
+          fn = fwd_reads_cut[[i]]), sapply(fwd_orients, primerHits,
+          fn = rev_reads_cut[[i]]))
+        log_tab[i, "rev_primer_match_cut"] <- sum(sapply(rev_orients, primerHits,
+          fn = fwd_reads_cut[[i]]), sapply(rev_orients, primerHits,
+          fn = rev_reads_cut[[i]]))
+      }
 
       # quality-filter sequences
       message("Quality-filtering reads...")
       fwd_filt <- tempfile(fileext = ".fastq.gz")  
       rev_filt <- tempfile(fileext = ".fastq.gz")
-      temp <- filterAndTrim(fwd = fwd_reads_cut[i], filt = fwd_filt,
-        rev = rev_reads_cut[i], filt.rev = rev_filt, maxN = maxN,
-        maxEE = maxEE, truncQ = truncQ, truncLen = truncLen, minLen = minLen,
-        rm.phix = rm.phix, compress = T, verbose = T)
+      if(primers) {
+        temp <- filterAndTrim(fwd = fwd_reads_cut[i], filt = fwd_filt,
+          rev = rev_reads_cut[i], filt.rev = rev_filt, maxN = maxN,
+          maxEE = maxEE, truncQ = truncQ, truncLen = truncLen, minLen = minLen,
+          rm.phix = rm.phix, compress = T, verbose = T)
+      } else {
+        temp <- filterAndTrim(fwd = fwd_reads_filtN[i], filt = fwd_filt,
+          rev = rev_reads_filtN[i], filt.rev = rev_filt, maxN = maxN,
+          maxEE = maxEE, truncQ = truncQ, truncLen = truncLen, minLen = minLen,
+          rm.phix = rm.phix, compress = T, verbose = T)
+      }
       log_tab[i , "filename"] <- rownames(temp)
       log_tab[i , "reads_filt_in"] <- temp[1]
       log_tab[i , "reads_filt_out"] <- temp[2]
