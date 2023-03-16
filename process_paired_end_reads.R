@@ -210,12 +210,14 @@ process_paired_end_reads <- function(data_folder, output_string = "output",
       print(x)
       dev.off()
 
-      pdf(paste0(output_QC, "/", i, "_rev_cut.pdf"), w = 4, h = 3)
-      x <- tryCatch(plotQualityProfile(rev_reads_cut[i]),
-        error = function(e) plot(1, 1, type = "n", axes = F, ylab = NA,
-        xlab = NA))
-      print(x)
-      dev.off()
+      if(primers) {
+        pdf(paste0(output_QC, "/", i, "_rev_cut.pdf"), w = 4, h = 3)
+        x <- tryCatch(plotQualityProfile(rev_reads_cut[i]),
+          error = function(e) plot(1, 1, type = "n", axes = F, ylab = NA,
+          xlab = NA))
+        print(x)
+        dev.off()
+      }
 
       pdf(paste0(output_QC, "/", i, "_fwd_filt.pdf"), w = 4, h = 3)
       x <- tryCatch(plotQualityProfile(fwd_filt),
